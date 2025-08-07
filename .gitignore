@@ -28,5 +28,7 @@ npm-debug.log*
 # Chrome extension development
 *.crx
 *.pem
+
+# Documentation files (keeping these private)
 PUBLICATION_CHECKLIST.md
 FINAL_CHECKLIST.md
