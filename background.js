@@ -70,6 +70,10 @@ class SmartTabManager {
           await this.toggleFocusMode();
           sendResponse({ success: true });
           break;
+        case 'saveSession':
+          await this.quickSaveSession();
+          sendResponse({ success: true });
+          break;
         case 'recordTimeSpent':
           await this.recordTimeSpent(request.data);
           sendResponse({ success: true });
