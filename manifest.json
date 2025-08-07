@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "Smart Tabs",
+  "version": "1.0.0",
+  "description": "AI-powered tab management with auto-grouping, session saving, and productivity insights by Ankit Biswas",
+  "author": "Ankit Biswas",
+  "homepage_url": "https://github.com/ANKIT-BISWAS-20/Smart-Tab-Extension",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "activeTab",
+    "sessions",
+    "background"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle-focus-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F"
+      },
+      "description": "Toggle Focus Mode"
+    },
+    "save-session": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Save Current Session"
+    },
+    "auto-group-tabs": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G"
+      },
+      "description": "Auto Group Tabs"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["analytics.html", "analytics.js", "icon.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

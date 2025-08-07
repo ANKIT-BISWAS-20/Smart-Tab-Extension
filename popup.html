@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      width: 400px;
+      min-height: 500px;
+      margin: 0;
+      padding: 0;
+      font-family: 'Google Sans', sans-serif;
+      background: #1a1a1a;
+      color: white;
+    }
+    
+    .header {
+      padding: 20px;
+      text-align: center;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      position: relative;
+    }
+    
+    .header .brand-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    
+    .header .brand-logo-icon {
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .header .brand-logo-icon img {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+    }
+    
+    .header .brand-logo-text {
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      padding: 15px;
+      background: #252525;
+      border-bottom: 1px solid #404040;
+    }
+    
+    .stat {
+      text-align: center;
+    }
+    
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
+      color: #4CAF50;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    .actions {
+      padding: 20px;
+    }
+    
+    .action-btn {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 8px;
+      background: #2d2d2d;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 1px solid #404040;
+    }
+    
+    .action-btn:hover {
+      background: #404040;
+      transform: translateY(-2px);
+      border-color: #555555;
+    }
+    
+    .action-btn.primary {
+      background: #4CAF50;
+    }
+    
+    .action-btn.primary:hover {
+      background: #45a049;
+    }
+    
+    .sessions {
+      padding: 0 20px 20px;
+    }
+    
+    .session-item {
+      padding: 10px;
+      margin: 5px 0;
+      background: #2d2d2d;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      border: 1px solid #404040;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .session-item:hover {
+      background: #404040;
+      border-color: #555555;
+    }
+    
+    .session-content {
+      flex: 1;
+      cursor: pointer;
+    }
+    
+    .session-actions {
+      display: flex;
+      gap: 5px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .session-item:hover .session-actions {
+      opacity: 1;
+    }
+    
+    .delete-session-btn {
+      background: #FF5722;
+      border: none;
+      border-radius: 4px;
+      color: white;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 12px;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 24px;
+    }
+    
+    .delete-session-btn:hover {
+      background: #D32F2F;
+      transform: scale(1.1);
+    }
+    
+    .delete-session-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .session-name {
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    .session-info {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+    
+    .focus-mode {
+      background: #FF6B6B !important;
+    }
+    
+    .focus-mode:hover {
+      background: #FF5252 !important;
+    }
+    
+    .time-breakdown {
+      padding: 10px 20px;
+      background: #252525;
+      border-bottom: 1px solid #404040;
+    }
+    
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    
+    .breakdown-item.productive {
+      color: #4CAF50;
+    }
+    
+    .breakdown-item.neutral {
+      color: #FFC107;
+    }
+    
+    .breakdown-item.distracting {
+      color: #FF5722;
+    }
+    
+    .breakdown-label {
+      opacity: 0.9;
+    }
+    
+    .breakdown-time {
+      font-weight: 600;
+    }
+    
+    .time-stats-btn {
+      background: #2196F3 !important;
+    }
+    
+    .time-stats-btn:hover {
+      background: #1976D2 !important;
+    }
+    
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      opacity: 0.9;
+    }
+    
+    /* Floating Quick Actions */
+    .floating-actions {
+      position: fixed;
+      bottom: 15px;
+      right: 15px;
+      z-index: 1000;
+    }
+    
+    .quick-action-btn {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(45deg, #4CAF50, #2196F3);
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    
+    .quick-action-btn:hover {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+    
+    .quick-action-btn:active {
+      transform: translateY(-1px) scale(0.98);
+    }
+    
+    .quick-action-btn.secondary {
+      background: rgba(45, 45, 45, 0.9);
+      border: 1px solid #404040;
+      font-size: 14px;
+    }
+    
+    .quick-action-btn.secondary:hover {
+      background: rgba(64, 64, 64, 0.9);
+      border-color: #555555;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand-logo">
+      <div class="brand-logo-icon">
+        <img src="./icon.png" alt="Smart Tabs Logo">
+      </div>
+      <div class="brand-logo-text">by Ankit Biswas</div>
+    </div>
+    <h1>Smart Tabs</h1>
+  </div>
+  
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-number" id="tabCount">0</div>
+      <div class="stat-label">Tabs</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number" id="groupCount">0</div>
+      <div class="stat-label">Groups</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number" id="todayTime">0m</div>
+      <div class="stat-label">Today</div>
+    </div>
+  </div>
+  
+  <div class="time-breakdown">
+    <div class="breakdown-item productive">
+      <span class="breakdown-label">Productive</span>
+      <span class="breakdown-time" id="productiveTime">0m</span>
+    </div>
+    <div class="breakdown-item neutral">
+      <span class="breakdown-label">Neutral</span>
+      <span class="breakdown-time" id="neutralTime">0m</span>
+    </div>
+    <div class="breakdown-item distracting">
+      <span class="breakdown-label">Distracting</span>
+      <span class="breakdown-time" id="distractingTime">0m</span>
+    </div>
+  </div>
+  
+  <div class="actions">
+    <button class="action-btn primary" id="autoGroup">🎯 Auto Group Tabs</button>
+    <button class="action-btn" id="closeDuplicates">🗑️ Close Duplicates</button>
+    <button class="action-btn" id="suspendUnused">💤 Suspend Unused</button>
+    <button class="action-btn" id="saveSession">💾 Save Session</button>
+    <button class="action-btn time-stats-btn" id="timeStats">📊 Time Analytics</button>
+    <button class="action-btn" id="focusMode">🎭 Toggle Focus Mode</button>
+  </div>
+  
+  <div class="sessions">
+    <div class="section-title">Saved Sessions</div>
+    <div id="sessionsList">
+      <!-- Sessions will be populated here -->
+    </div>
+  </div>
+
+  <!-- Floating Quick Actions -->
+  <!-- <div class="floating-actions">
+    <button class="quick-action-btn secondary" id="quickRefresh" title="Refresh Data">🔄</button>
+    <button class="quick-action-btn" id="quickAnalytics" title="Quick Analytics">📊</button>
+  </div> -->
+
+  <script src="popup.js"></script>
+</body>
+</html>
