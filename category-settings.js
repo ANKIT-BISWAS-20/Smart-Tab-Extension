@@ -165,9 +165,31 @@ class CategoryManager {
         throw new Error('Chrome APIs not available - please run as extension');
       }
       
+      // Show initial feedback
+      this.showNotification('Loading browsing data...', 'info');
+      
+      // FIRST: Try to load from extension's own tracking data
+      console.log('Attempting to load from extension tracking data...');
+      const trackingData = await this.loadFromExtensionTracking();
+      
+      if (trackingData && trackingData.length > 0) {
+        console.log('Successfully loaded from extension tracking:', trackingData.length, 'domains');
+        this.domains = trackingData;
+        this.categorizeDomainsInitially();
+        this.renderDomains();
+        this.updateStats();
+        this.showNotification(`Successfully loaded ${this.domains.length} domains from Smart Tabs data!`, 'success');
+        return;
+      }
+      
+      // FALLBACK: Try Chrome History API
+      console.log('Extension tracking data empty, trying Chrome History API...');
+      
       // Check if history permission is available
       if (!chrome.history) {
-        throw new Error('History API not available - please check permissions');
+        console.warn('History API not available, loading sample data');
+        this.loadSampleData();
+        return;
       }
       
       const periodDays = parseInt(document.getElementById('periodSelect').value);
@@ -175,9 +197,6 @@ class CategoryManager {
       
       console.log('Searching history from:', new Date(startTime));
       console.log('Period days:', periodDays);
-      
-      // Show initial feedback
-      this.showNotification('Loading browsing history...', 'info');
       
       // Get browsing history
       const historyItems = await chrome.history.search({
@@ -189,58 +208,18 @@ class CategoryManager {
       console.log('Found history items:', historyItems.length);
 
       if (historyItems.length === 0) {
-        throw new Error('No browsing history found for the selected time period');
+        console.warn('No browsing history found, loading sample data');
+        this.loadSampleData();
+        return;
       }
 
-      // Process domains
-      const domainData = {};
-      let processedCount = 0;
-      let skippedCount = 0;
+      // Process domains from history
+      const domainData = await this.processHistoryItems(historyItems);
       
-      for (const item of historyItems) {
-        try {
-          const url = new URL(item.url);
-          const domain = this.normalizeDomain(url.hostname);
-          
-          // Skip chrome:// and extension URLs
-          if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:' || url.protocol === 'moz-extension:') {
-            skippedCount++;
-            continue;
-          }
-          
-          // Skip empty domains
-          if (!domain || domain.length < 2) {
-            skippedCount++;
-            continue;
-          }
-          
-          if (!domainData[domain]) {
-            domainData[domain] = {
-              domain,
-              visits: 0,
-              totalTime: 0,
-              lastVisit: 0,
-              urls: []
-            };
-          }
-          
-          domainData[domain].visits += item.visitCount || 1;
-          domainData[domain].lastVisit = Math.max(domainData[domain].lastVisit, item.lastVisitTime || 0);
-          domainData[domain].urls.push(item.url);
-          processedCount++;
-        } catch (error) {
-          // Skip invalid URLs
-          skippedCount++;
-          continue;
-        }
-      }
-
-      console.log('Processed domains:', Object.keys(domainData).length);
-      console.log('Processed URLs:', processedCount);
-      console.log('Skipped URLs:', skippedCount);
-
       if (Object.keys(domainData).length === 0) {
-        throw new Error('No valid domains found in browsing history');
+        console.warn('No valid domains found in history, loading sample data');
+        this.loadSampleData();
+        return;
       }
 
       // Convert to array and add time estimates
@@ -262,7 +241,9 @@ class CategoryManager {
       console.log('Final domains after filtering:', afterFilter, '(filtered out', beforeFilter - afterFilter, 'low-activity domains)');
 
       if (this.domains.length === 0) {
-        throw new Error('No domains with sufficient activity found (minimum 2 visits required)');
+        console.warn('No domains with sufficient activity found, loading sample data');
+        this.loadSampleData();
+        return;
       }
 
       this.categorizeDomainsInitially();
@@ -281,22 +262,131 @@ class CategoryManager {
     }
   }
 
+  async loadFromExtensionTracking() {
+    try {
+      // Get data from the extension's background script
+      const response = await chrome.runtime.sendMessage({ action: 'getTimeStats' });
+      
+      if (response && response.success && response.data && response.data.topDomains) {
+        console.log('Raw tracking data:', response.data);
+        
+        const domains = response.data.topDomains
+          .filter(domain => domain.totalTime > 0 || domain.visitCount > 0)
+          .map(domain => ({
+            domain: domain.domain,
+            visits: domain.visitCount || 0,
+            totalTime: domain.totalTime || 0,
+            lastVisit: Date.now(),
+            category: domain.category || this.getDomainCategory(domain.domain),
+            urls: []
+          }));
+          
+        console.log('Processed tracking domains:', domains.length);
+        return domains;
+      }
+      
+      // Also try direct storage access
+      const storageResult = await chrome.storage.local.get(['timeTracking']);
+      if (storageResult.timeTracking) {
+        console.log('Got storage data:', Object.keys(storageResult.timeTracking).length, 'domains');
+        
+        const domains = Object.entries(storageResult.timeTracking)
+          .filter(([domain, data]) => data.totalTime > 0 || data.visitCount > 0)
+          .map(([domain, data]) => ({
+            domain: domain,
+            visits: data.visitCount || 0,
+            totalTime: data.totalTime || 0,
+            lastVisit: data.lastVisit || Date.now(),
+            category: data.category || this.getDomainCategory(domain),
+            urls: []
+          }));
+          
+        return domains;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error loading from extension tracking:', error);
+      return null;
+    }
+  }
+
+  async processHistoryItems(historyItems) {
+    const domainData = {};
+    let processedCount = 0;
+    let skippedCount = 0;
+    
+    for (const item of historyItems) {
+      try {
+        const url = new URL(item.url);
+        const domain = this.normalizeDomain(url.hostname);
+        
+        // Skip chrome:// and extension URLs
+        if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:' || url.protocol === 'moz-extension:') {
+          skippedCount++;
+          continue;
+        }
+        
+        // Skip empty domains
+        if (!domain || domain.length < 2) {
+          skippedCount++;
+          continue;
+        }
+        
+        if (!domainData[domain]) {
+          domainData[domain] = {
+            domain,
+            visits: 0,
+            totalTime: 0,
+            lastVisit: 0,
+            urls: []
+          };
+        }
+        
+        domainData[domain].visits += item.visitCount || 1;
+        domainData[domain].lastVisit = Math.max(domainData[domain].lastVisit, item.lastVisitTime || 0);
+        domainData[domain].urls.push(item.url);
+        processedCount++;
+      } catch (error) {
+        // Skip invalid URLs
+        skippedCount++;
+        continue;
+      }
+    }
+
+    console.log('Processed domains:', Object.keys(domainData).length);
+    console.log('Processed URLs:', processedCount);
+    console.log('Skipped URLs:', skippedCount);
+    
+    return domainData;
+  }
+
   loadSampleData() {
     console.log('Loading sample data...');
     this.domains = [
       { domain: 'github.com', visits: 25, totalTime: 3000, category: 'productive', lastVisit: Date.now() },
       { domain: 'stackoverflow.com', visits: 15, totalTime: 1800, category: 'productive', lastVisit: Date.now() },
+      { domain: 'dev.to', visits: 8, totalTime: 960, category: 'productive', lastVisit: Date.now() },
+      { domain: 'medium.com', visits: 10, totalTime: 1200, category: 'productive', lastVisit: Date.now() },
+      { domain: 'docs.google.com', visits: 12, totalTime: 1440, category: 'productive', lastVisit: Date.now() },
       { domain: 'youtube.com', visits: 30, totalTime: 3600, category: 'distracting', lastVisit: Date.now() },
       { domain: 'facebook.com', visits: 20, totalTime: 2400, category: 'distracting', lastVisit: Date.now() },
+      { domain: 'instagram.com', visits: 18, totalTime: 2160, category: 'distracting', lastVisit: Date.now() },
+      { domain: 'twitter.com', visits: 22, totalTime: 2640, category: 'distracting', lastVisit: Date.now() },
+      { domain: 'reddit.com', visits: 16, totalTime: 1920, category: 'distracting', lastVisit: Date.now() },
       { domain: 'google.com', visits: 40, totalTime: 1200, category: 'neutral', lastVisit: Date.now() },
-      { domain: 'medium.com', visits: 10, totalTime: 1200, category: 'productive', lastVisit: Date.now() }
+      { domain: 'wikipedia.org', visits: 12, totalTime: 1440, category: 'neutral', lastVisit: Date.now() },
+      { domain: 'amazon.com', visits: 8, totalTime: 960, category: 'neutral', lastVisit: Date.now() },
+      { domain: 'outlook.com', visits: 14, totalTime: 840, category: 'neutral', lastVisit: Date.now() },
+      { domain: 'microsoft.com', visits: 6, totalTime: 720, category: 'neutral', lastVisit: Date.now() }
     ];
     
+    console.log('Sample data loaded:', this.domains.length, 'domains');
     this.categorizeDomainsInitially();
     this.renderDomains();
     this.updateStats();
     
-    this.showNotification('Loaded sample data for demonstration', 'success');
+    this.showNotification('Loaded sample data for demonstration. To see your real data, browse some websites and reload this page.', 'info');
   }
 
   getDomainCategory(domain) {

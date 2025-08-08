@@ -604,91 +604,21 @@ class TimeAnalytics {
     
     hourlyDistribution.innerHTML = '';
     
+    // Use real hourly data if available, otherwise show empty state
+    const realHourlyData = this.data.hourlyStats || {};
+    
     // Create 24 hourly blocks (0-23)
     const hourlyData = new Array(24).fill(0).map((_, hour) => {
+      const realData = realHourlyData[hour] || {};
       return {
         hour,
-        productive: 0,
-        neutral: 0,
-        distracting: 0,
-        total: 0,
-        visitCount: 0
+        productive: realData.productive || 0,
+        neutral: realData.neutral || 0,
+        distracting: realData.distracting || 0,
+        total: realData.total || 0,
+        visitCount: realData.visitCount || 0,
+        domains: realData.domains || {}
       };
-    });
-    
-    // Enhanced simulation with more realistic patterns
-    const currentHour = new Date().getHours();
-    const currentDay = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
-    
-    // Define different patterns for different types of days
-    const isWeekend = currentDay === 0 || currentDay === 6;
-    const workingHours = isWeekend ? [10, 11, 12, 15, 16, 17] : [9, 10, 11, 14, 15, 16, 17, 18];
-    const eveningHours = [19, 20, 21, 22, 23];
-    const morningHours = [7, 8, 9];
-    const lateNightHours = [0, 1, 2, 23];
-    
-    // More sophisticated data distribution
-    this.data.topDomains?.forEach(site => {
-      if (site.todayTime > 0) {
-        const baseTime = site.todayTime;
-        
-        if (site.category === 'productive') {
-          // Productive sites peak during working hours
-          workingHours.forEach(hour => {
-            const intensity = this.getHourIntensity(hour, 'productive', isWeekend);
-            const timeAmount = (baseTime * intensity) / workingHours.length;
-            hourlyData[hour].productive += timeAmount;
-            hourlyData[hour].total += timeAmount;
-            hourlyData[hour].visitCount += Math.ceil(site.visitCount * intensity / 4);
-          });
-          
-          // Some spillover to morning hours
-          morningHours.forEach(hour => {
-            const intensity = 0.3;
-            const timeAmount = (baseTime * intensity) / morningHours.length;
-            hourlyData[hour].productive += timeAmount;
-            hourlyData[hour].total += timeAmount;
-            hourlyData[hour].visitCount += Math.ceil(site.visitCount * intensity / 8);
-          });
-          
-        } else if (site.category === 'distracting') {
-          // Distracting sites peak in evenings and late night
-          eveningHours.forEach(hour => {
-            const intensity = this.getHourIntensity(hour, 'distracting', isWeekend);
-            const timeAmount = (baseTime * intensity) / eveningHours.length;
-            hourlyData[hour].distracting += timeAmount;
-            hourlyData[hour].total += timeAmount;
-            hourlyData[hour].visitCount += Math.ceil(site.visitCount * intensity / 3);
-          });
-          
-          // Weekend pattern - more distributed throughout day
-          if (isWeekend) {
-            for (let hour = 12; hour < 18; hour++) {
-              const intensity = 0.4;
-              const timeAmount = (baseTime * intensity) / 6;
-              hourlyData[hour].distracting += timeAmount;
-              hourlyData[hour].total += timeAmount;
-              hourlyData[hour].visitCount += Math.ceil(site.visitCount * intensity / 6);
-            }
-          }
-          
-        } else {
-          // Neutral sites - more evenly distributed but with patterns
-          for (let hour = 8; hour < 24; hour++) {
-            let intensity = 0.5;
-            
-            // Higher during work hours, lower late at night
-            if (workingHours.includes(hour)) intensity = 0.7;
-            else if (eveningHours.includes(hour)) intensity = 0.6;
-            else if (lateNightHours.includes(hour)) intensity = 0.2;
-            
-            const timeAmount = (baseTime * intensity) / 16;
-            hourlyData[hour].neutral += timeAmount;
-            hourlyData[hour].total += timeAmount;
-            hourlyData[hour].visitCount += Math.ceil(site.visitCount * intensity / 12);
-          }
-        }
-      }
     });
     
     // Find peak hours and calculate statistics
@@ -696,13 +626,14 @@ class TimeAnalytics {
     const totalDayTime = hourlyData.reduce((sum, h) => sum + h.total, 0);
     const avgHourTime = totalDayTime / 24;
     
-    const peakHours = hourlyData
+    // Only mark as peak if there's actually data
+    const peakHours = totalDayTime > 0 ? hourlyData
       .map((h, index) => ({ ...h, hourIndex: index }))
       .filter(h => h.total > avgHourTime * 1.5)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 3);
+      .slice(0, 3) : [];
     
-    // Render hourly blocks with enhanced visualization
+    // Render hourly blocks with real data
     hourlyData.forEach((hourData, index) => {
       const timeBlock = document.createElement('div');
       timeBlock.className = 'time-block';
@@ -710,12 +641,14 @@ class TimeAnalytics {
       const totalTime = hourData.total;
       const isPeakHour = peakHours.some(peak => peak.hourIndex === index);
       
-      // Determine dominant category
+      // Determine dominant category only if there's data
       let dominantCategory = 'neutral';
-      if (hourData.productive > hourData.neutral && hourData.productive > hourData.distracting) {
-        dominantCategory = 'productive';
-      } else if (hourData.distracting > hourData.neutral && hourData.distracting > hourData.productive) {
-        dominantCategory = 'distracting';
+      if (totalTime > 0) {
+        if (hourData.productive > hourData.neutral && hourData.productive > hourData.distracting) {
+          dominantCategory = 'productive';
+        } else if (hourData.distracting > hourData.neutral && hourData.distracting > hourData.productive) {
+          dominantCategory = 'distracting';
+        }
       }
       
       timeBlock.className += ` ${dominantCategory}`;
@@ -783,33 +716,11 @@ class TimeAnalytics {
       hourlyDistribution.appendChild(timeBlock);
     });
     
-    // Generate activity insights
-    this.generateActivityInsights(hourlyData, peakHours, totalDayTime, isWeekend);
+    // Generate activity insights with real data
+    this.generateActivityInsights(hourlyData, peakHours, totalDayTime);
   }
   
-  getHourIntensity(hour, category, isWeekend) {
-    // Return different intensity multipliers based on hour, category, and day type
-    const baseIntensity = 1.0;
-    
-    if (category === 'productive') {
-      if (isWeekend) {
-        return hour >= 10 && hour <= 16 ? baseIntensity * 0.8 : baseIntensity * 0.3;
-      } else {
-        if (hour >= 9 && hour <= 11) return baseIntensity * 1.2; // Morning peak
-        if (hour >= 14 && hour <= 17) return baseIntensity * 1.0; // Afternoon
-        return baseIntensity * 0.4;
-      }
-    } else if (category === 'distracting') {
-      if (hour >= 19 && hour <= 22) return baseIntensity * 1.3; // Evening peak
-      if (hour >= 12 && hour <= 14) return baseIntensity * 0.8; // Lunch break
-      if (isWeekend && hour >= 10 && hour <= 18) return baseIntensity * 0.9;
-      return baseIntensity * 0.5;
-    }
-    
-    return baseIntensity * 0.6; // Neutral default
-  }
-  
-  generateActivityInsights(hourlyData, peakHours, totalDayTime, isWeekend) {
+  generateActivityInsights(hourlyData, peakHours, totalDayTime) {
     const activityInsights = document.getElementById('activityInsights');
     if (!activityInsights) return;
     
@@ -817,67 +728,79 @@ class TimeAnalytics {
     
     const insights = [];
     
-    // Peak hours insight
-    if (peakHours.length > 0) {
-      const topPeak = peakHours[0];
-      const peakTime = topPeak.hour === 0 ? '12 AM' : 
-                      topPeak.hour === 12 ? '12 PM' : 
-                      topPeak.hour < 12 ? `${topPeak.hour} AM` : `${topPeak.hour - 12} PM`;
-      
-      insights.push({
-        type: 'peak',
-        title: '⭐ Peak Activity',
-        text: `Your most active hour is ${peakTime} with ${this.formatTime(topPeak.total)} of browsing time.`
-      });
-    }
-    
-    // Productivity pattern insight
-    const productiveHours = hourlyData.filter(h => h.productive > h.neutral && h.productive > h.distracting);
-    if (productiveHours.length > 0) {
-      const productiveTimeRange = this.getTimeRange(productiveHours.map(h => h.hour));
-      insights.push({
-        type: 'productive',
-        title: '✅ Productive Hours',
-        text: `You're most productive between ${productiveTimeRange}. Consider scheduling important tasks during this time.`
-      });
-    }
-    
-    // Focus recommendation
-    const distractingTime = hourlyData.reduce((sum, h) => sum + h.distracting, 0);
-    const productiveTime = hourlyData.reduce((sum, h) => sum + h.productive, 0);
-    
-    if (distractingTime > productiveTime) {
+    // Only generate insights if there's actual data
+    if (totalDayTime === 0) {
       insights.push({
         type: 'focus',
-        title: '🎯 Focus Tip',
-        text: `Try reducing distracting content during peak hours. Consider using website blockers during ${peakHours[0] ? (peakHours[0].hour < 12 ? `${peakHours[0].hour} AM` : `${peakHours[0].hour - 12} PM`) : 'busy times'}.`
+        title: '🌟 Start Tracking',
+        text: 'Use your browser to start seeing real-time hourly activity patterns here!'
       });
     } else {
-      insights.push({
-        type: 'focus',
-        title: '🎯 Great Focus!',
-        text: `You maintain good focus during active hours. Your productive time exceeds distracting content by ${this.formatTime(productiveTime - distractingTime)}.`
-      });
-    }
-    
-    // Weekend vs weekday pattern
-    if (isWeekend) {
-      insights.push({
-        type: 'weekend',
-        title: '🏖️ Weekend Pattern',
-        text: 'Weekend browsing detected. Activity patterns typically shift later in the day with more entertainment content.'
-      });
+      // Peak hours insight (only if there are peak hours)
+      if (peakHours.length > 0) {
+        const topPeak = peakHours[0];
+        const peakTime = topPeak.hour === 0 ? '12 AM' : 
+                        topPeak.hour === 12 ? '12 PM' : 
+                        topPeak.hour < 12 ? `${topPeak.hour} AM` : `${topPeak.hour - 12} PM`;
+        
+        insights.push({
+          type: 'peak',
+          title: '⭐ Peak Activity',
+          text: `Your most active hour is ${peakTime} with ${this.formatTime(topPeak.total)} of browsing time.`
+        });
+      }
+      
+      // Productivity pattern insight
+      const productiveHours = hourlyData.filter(h => h.productive > h.neutral && h.productive > h.distracting && h.total > 0);
+      if (productiveHours.length > 0) {
+        const productiveTimeRange = this.getTimeRange(productiveHours.map(h => h.hour));
+        insights.push({
+          type: 'productive',
+          title: '✅ Productive Hours',
+          text: `You're most productive between ${productiveTimeRange}. Consider scheduling important tasks during this time.`
+        });
+      }
+      
+      // Focus recommendation based on real data
+      const distractingTime = hourlyData.reduce((sum, h) => sum + h.distracting, 0);
+      const productiveTime = hourlyData.reduce((sum, h) => sum + h.productive, 0);
+      
+      if (distractingTime > productiveTime && distractingTime > 0) {
+        const distractingPercentage = Math.round((distractingTime / totalDayTime) * 100);
+        insights.push({
+          type: 'focus',
+          title: '🎯 Focus Opportunity',
+          text: `${distractingPercentage}% of your time is spent on distracting sites. Try using focus mode during peak hours.`
+        });
+      } else if (productiveTime > 0) {
+        const productivePercentage = Math.round((productiveTime / totalDayTime) * 100);
+        insights.push({
+          type: 'productive',
+          title: '🎉 Great Work!',
+          text: `${productivePercentage}% of your browsing time is spent productively. Keep up the excellent work!`
+        });
+      }
+      
+      // Activity distribution insight
+      const activeHours = hourlyData.filter(h => h.total > 0).length;
+      if (activeHours > 0) {
+        insights.push({
+          type: 'focus',
+          title: '📊 Activity Spread',
+          text: `You've been active across ${activeHours} hours today, with an average of ${this.formatTime(totalDayTime / activeHours)} per active hour.`
+        });
+      }
     }
     
     // Render insights
     insights.forEach(insight => {
-      const insightElement = document.createElement('div');
-      insightElement.className = `insight-item ${insight.type}`;
-      insightElement.innerHTML = `
+      const insightItem = document.createElement('div');
+      insightItem.className = `insight-item ${insight.type}`;
+      insightItem.innerHTML = `
         <div class="insight-title">${insight.title}</div>
         <div class="insight-text">${insight.text}</div>
       `;
-      activityInsights.appendChild(insightElement);
+      activityInsights.appendChild(insightItem);
     });
   }
   

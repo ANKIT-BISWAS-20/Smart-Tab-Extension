@@ -118,7 +118,7 @@ class SmartTabManager {
   }
 
   async initializeStorage() {
-    const result = await chrome.storage.local.get(['productivity', 'tabActivity', 'timeTracking', 'dailyStats', 'domainCategories']);
+    const result = await chrome.storage.local.get(['productivity', 'tabActivity', 'timeTracking', 'dailyStats', 'domainCategories', 'hourlyStats']);
     if (!result.productivity) {
       await chrome.storage.local.set({ productivity: 75 });
     }
@@ -133,6 +133,9 @@ class SmartTabManager {
     }
     if (!result.domainCategories) {
       await chrome.storage.local.set({ domainCategories: {} });
+    }
+    if (!result.hourlyStats) {
+      await chrome.storage.local.set({ hourlyStats: {} });
     }
   }
 
@@ -398,11 +401,14 @@ class SmartTabManager {
     try {
       const { url, domain, title, timeSpent, timestamp } = data;
       const today = new Date().toDateString();
+      const visitTime = new Date(timestamp);
+      const hour = visitTime.getHours();
       
       // Get current time tracking data
-      const result = await chrome.storage.local.get(['timeTracking', 'dailyStats']);
+      const result = await chrome.storage.local.get(['timeTracking', 'dailyStats', 'hourlyStats']);
       const timeTracking = result.timeTracking || {};
       const dailyStats = result.dailyStats || {};
+      const hourlyStats = result.hourlyStats || {};
       
       // Initialize domain tracking if not exists
       if (!timeTracking[domain]) {
@@ -448,12 +454,41 @@ class SmartTabManager {
       }
       dailyStats[today].domains[domain] += timeSpent;
       
-      // Categorize time
-      const category = timeTracking[domain].category;
-      dailyStats[today][category] += timeSpent;
+      // NEW: Track hourly data
+      if (!hourlyStats[today]) {
+        hourlyStats[today] = {};
+        // Initialize all 24 hours
+        for (let h = 0; h < 24; h++) {
+          hourlyStats[today][h] = {
+            productive: 0,
+            neutral: 0,
+            distracting: 0,
+            total: 0,
+            visitCount: 0,
+            domains: {}
+          };
+        }
+      }
       
-      // Save updated data
-      await chrome.storage.local.set({ timeTracking, dailyStats });
+      // Get domain category
+      const domainCategory = timeTracking[domain].category || 'neutral';
+      
+      // Update hourly stats
+      hourlyStats[today][hour][domainCategory] += timeSpent;
+      hourlyStats[today][hour].total += timeSpent;
+      hourlyStats[today][hour].visitCount += 1;
+      
+      // Track domain activity in this hour
+      if (!hourlyStats[today][hour].domains[domain]) {
+        hourlyStats[today][hour].domains[domain] = 0;
+      }
+      hourlyStats[today][hour].domains[domain] += timeSpent;
+      
+      // Categorize time for daily stats
+      dailyStats[today][domainCategory] += timeSpent;
+      
+      // Save updated data including hourly stats
+      await chrome.storage.local.set({ timeTracking, dailyStats, hourlyStats });
       
       // Clean old data (keep last 30 days)
       await this.cleanOldTimeData(dailyStats);
@@ -464,12 +499,14 @@ class SmartTabManager {
 
   async getTimeStats() {
     try {
-      const result = await chrome.storage.local.get(['timeTracking', 'dailyStats']);
+      const result = await chrome.storage.local.get(['timeTracking', 'dailyStats', 'hourlyStats']);
       const timeTracking = result.timeTracking || {};
       const dailyStats = result.dailyStats || {};
+      const hourlyStats = result.hourlyStats || {};
       
       const today = new Date().toDateString();
       const todayStats = dailyStats[today] || { totalTime: 0, productive: 0, neutral: 0, distracting: 0 };
+      const todayHourlyStats = hourlyStats[today] || {};
       
       // Get top domains for today
       const topDomains = Object.entries(timeTracking)
@@ -490,6 +527,7 @@ class SmartTabManager {
         today: todayStats,
         topDomains,
         weekStats,
+        hourlyStats: todayHourlyStats,
         totalDomains: Object.keys(timeTracking).length
       };
     } catch (error) {
@@ -578,6 +616,7 @@ class SmartTabManager {
     await chrome.storage.local.set({ 
       timeTracking: {}, 
       dailyStats: {},
+      hourlyStats: {},
       tabActivity: {},
       productivity: 75,
       domainCategories: {},
