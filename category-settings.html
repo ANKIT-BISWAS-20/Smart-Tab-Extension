@@ -793,9 +793,64 @@
       background: #555;
       transform: translateY(-2px);
     }
+
+    /* Brand Logo Styles */
+    .brand-logo {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(45, 45, 45, 0.95);
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 8px 15px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .brand-logo:hover {
+      background: rgba(64, 64, 64, 0.95);
+      border-color: #555555;
+      transform: translateY(-2px);
+    }
+
+    .brand-logo-icon {
+      width: 24px;
+      height: 24px;
+      background: white;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .brand-logo-icon img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+    }
+
+    .brand-logo-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+    }
   </style>
 </head>
 <body>
+  <!-- Brand Logo -->
+  <div class="brand-logo">
+    <div class="brand-logo-icon">
+      <img src="./icon.png" alt="Smart Tabs Logo">
+    </div>
+    <div class="brand-logo-text">Smart Tabs</div>
+  </div>
+
   <div class="container">
     <div class="header">
       <h1>🎯 Smart Category Manager</h1>
