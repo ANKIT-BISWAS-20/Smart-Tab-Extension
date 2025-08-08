@@ -9,7 +9,89 @@ class SmartTabManager {
   init() {
     this.bindEvents();
     this.initializeStorage();
+    this.migrateDomainData(); // Normalize existing domain data
     this.startProductivityTracking();
+  }
+
+  // Normalize domain to handle www and other variations consistently
+  normalizeDomain(hostname) {
+    if (!hostname) return '';
+    
+    // Remove www prefix
+    let normalized = hostname.toLowerCase().replace(/^www\./, '');
+    
+    // Handle other common prefixes if needed
+    normalized = normalized.replace(/^m\./, ''); // mobile prefixes
+    
+    return normalized;
+  }
+
+  // Migrate existing data to use normalized domains
+  async migrateDomainData() {
+    try {
+      const result = await chrome.storage.local.get(['timeTracking', 'domainCategories']);
+      let timeTracking = result.timeTracking || {};
+      let domainCategories = result.domainCategories || {};
+      let hasChanges = false;
+
+      // Migrate timeTracking data
+      const normalizedTimeTracking = {};
+      for (const [domain, data] of Object.entries(timeTracking)) {
+        const normalizedDomain = this.normalizeDomain(domain);
+        
+        if (normalizedDomain !== domain) {
+          hasChanges = true;
+          console.log(`Migrating domain: ${domain} -> ${normalizedDomain}`);
+        }
+        
+        if (normalizedTimeTracking[normalizedDomain]) {
+          // Merge data for domains that normalize to the same value
+          normalizedTimeTracking[normalizedDomain].totalTime += data.totalTime || 0;
+          normalizedTimeTracking[normalizedDomain].visitCount += data.visitCount || 0;
+          normalizedTimeTracking[normalizedDomain].lastVisit = Math.max(
+            normalizedTimeTracking[normalizedDomain].lastVisit || 0,
+            data.lastVisit || 0
+          );
+          
+          // Merge URLs
+          if (data.urls) {
+            normalizedTimeTracking[normalizedDomain].urls = {
+              ...normalizedTimeTracking[normalizedDomain].urls,
+              ...data.urls
+            };
+          }
+        } else {
+          normalizedTimeTracking[normalizedDomain] = { ...data };
+        }
+      }
+
+      // Migrate domainCategories data
+      const normalizedCategories = {};
+      for (const [domain, category] of Object.entries(domainCategories)) {
+        const normalizedDomain = this.normalizeDomain(domain);
+        
+        if (normalizedDomain !== domain) {
+          hasChanges = true;
+          console.log(`Migrating category: ${domain} -> ${normalizedDomain} (${category})`);
+        }
+        
+        // Keep the most recent categorization if there are conflicts
+        if (!normalizedCategories[normalizedDomain] || normalizedDomain !== domain) {
+          normalizedCategories[normalizedDomain] = category;
+        }
+      }
+
+      if (hasChanges) {
+        console.log('Saving migrated domain data...');
+        await chrome.storage.local.set({
+          timeTracking: normalizedTimeTracking,
+          domainCategories: normalizedCategories
+        });
+        console.log('Domain migration completed');
+      }
+    } catch (error) {
+      console.error('Error migrating domain data:', error);
+    }
   }
 
   bindEvents() {
@@ -36,7 +118,7 @@ class SmartTabManager {
   }
 
   async initializeStorage() {
-    const result = await chrome.storage.local.get(['productivity', 'tabActivity', 'timeTracking', 'dailyStats']);
+    const result = await chrome.storage.local.get(['productivity', 'tabActivity', 'timeTracking', 'dailyStats', 'domainCategories']);
     if (!result.productivity) {
       await chrome.storage.local.set({ productivity: 75 });
     }
@@ -48,6 +130,9 @@ class SmartTabManager {
     }
     if (!result.dailyStats) {
       await chrome.storage.local.set({ dailyStats: {} });
+    }
+    if (!result.domainCategories) {
+      await chrome.storage.local.set({ domainCategories: {} });
     }
   }
 
@@ -92,6 +177,23 @@ class SmartTabManager {
           });
           sendResponse({ success: true });
           break;
+        case 'openCategorySettings':
+          console.log('Opening category settings page...');
+          try {
+            const tab = await chrome.tabs.create({
+              url: chrome.runtime.getURL('category-settings.html')
+            });
+            console.log('Category settings tab created:', tab.id);
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('Error opening category settings:', error);
+            sendResponse({ success: false, error: error.message });
+          }
+          break;
+        case 'reanalyzeFromCategories':
+          await this.reanalyzeFromCategories(request.data);
+          sendResponse({ success: true });
+          break;
         default:
           sendResponse({ success: false, error: 'Unknown action' });
       }
@@ -128,7 +230,7 @@ class SmartTabManager {
 
         try {
           const url = new URL(tab.url);
-          const domain = url.hostname.replace('www.', '');
+          const domain = this.normalizeDomain(url.hostname);
           
           if (!groups[domain]) {
             groups[domain] = [];
@@ -308,7 +410,7 @@ class SmartTabManager {
           totalTime: 0,
           visitCount: 0,
           lastVisit: timestamp,
-          category: this.categorizeWebsite(domain),
+          category: await this.categorizeWebsite(domain),
           urls: {}
         };
       }
@@ -396,28 +498,45 @@ class SmartTabManager {
     }
   }
 
-  categorizeWebsite(domain) {
-    const productiveKeywords = [
-      'github', 'stackoverflow', 'dev.to', 'medium', 'docs.', 'documentation',
-      'learn', 'tutorial', 'course', 'education', 'wiki', 'research'
-    ];
-    
-    const distractingKeywords = [
-      'facebook', 'twitter', 'instagram', 'tiktok', 'youtube', 'netflix',
-      'reddit', 'gaming', 'entertainment', 'social', 'news', 'sport'
-    ];
-    
-    const domainLower = domain.toLowerCase();
-    
-    if (productiveKeywords.some(keyword => domainLower.includes(keyword))) {
-      return 'productive';
+  async categorizeWebsite(domain) {
+    try {
+      // Normalize the domain first
+      const normalizedDomain = this.normalizeDomain(domain);
+      
+      // First check if domain has been manually categorized
+      const result = await chrome.storage.local.get(['domainCategories']);
+      const domainCategories = result.domainCategories || {};
+      
+      if (domainCategories[normalizedDomain]) {
+        return domainCategories[normalizedDomain];
+      }
+      
+      // Fallback to keyword-based categorization
+      const productiveKeywords = [
+        'github', 'stackoverflow', 'dev.to', 'medium', 'docs.', 'documentation',
+        'learn', 'tutorial', 'course', 'education', 'wiki', 'research'
+      ];
+      
+      const distractingKeywords = [
+        'facebook', 'twitter', 'instagram', 'tiktok', 'youtube', 'netflix',
+        'reddit', 'gaming', 'entertainment', 'social', 'news', 'sport'
+      ];
+      
+      const domainLower = normalizedDomain.toLowerCase();
+      
+      if (productiveKeywords.some(keyword => domainLower.includes(keyword))) {
+        return 'productive';
+      }
+      
+      if (distractingKeywords.some(keyword => domainLower.includes(keyword))) {
+        return 'distracting';
+      }
+      
+      return 'neutral';
+    } catch (error) {
+      console.error('Error categorizing website:', error);
+      return 'neutral';
     }
-    
-    if (distractingKeywords.some(keyword => domainLower.includes(keyword))) {
-      return 'distracting';
-    }
-    
-    return 'neutral';
   }
 
   getWeeklyStats(dailyStats) {
@@ -462,6 +581,84 @@ class SmartTabManager {
     });
   }
 
+  async reanalyzeFromCategories(domainCategories) {
+    try {
+      console.log('Reanalyzing categories for domains:', Object.keys(domainCategories));
+      
+      const result = await chrome.storage.local.get(['timeTracking', 'dailyStats', 'domainCategories']);
+      const timeTracking = result.timeTracking || {};
+      const dailyStats = result.dailyStats || {};
+      
+      // First, save the new domain categories
+      await chrome.storage.local.set({ domainCategories: domainCategories });
+      
+      // Update categories for all tracked domains
+      for (const [domain, data] of Object.entries(timeTracking)) {
+        const newCategory = domainCategories[domain] || await this.categorizeWebsite(domain);
+        console.log(`Updating ${domain} from ${data.category} to ${newCategory}`);
+        timeTracking[domain].category = newCategory;
+      }
+      
+      // Also create entries for newly categorized domains that might not have time tracking yet
+      for (const [domain, category] of Object.entries(domainCategories)) {
+        if (!timeTracking[domain]) {
+          console.log(`Creating new tracking entry for ${domain} as ${category}`);
+          timeTracking[domain] = {
+            totalTime: 0,
+            visitCount: 0,
+            lastVisit: Date.now(),
+            category: category,
+            urls: {}
+          };
+        }
+      }
+      
+      // Recalculate daily stats
+      for (const [date, dayStats] of Object.entries(dailyStats)) {
+        const newDayStats = {
+          totalTime: dayStats.totalTime,
+          domains: dayStats.domains || {},
+          productive: 0,
+          neutral: 0,
+          distracting: 0
+        };
+        
+        // Recalculate category totals for this day
+        for (const [domain, timeSpent] of Object.entries(dayStats.domains || {})) {
+          if (timeTracking[domain]) {
+            const category = timeTracking[domain].category;
+            newDayStats[category] += timeSpent;
+          }
+        }
+        
+        dailyStats[date] = newDayStats;
+      }
+      
+      // Save updated data
+      await chrome.storage.local.set({ timeTracking, dailyStats });
+      
+      console.log('Reanalysis complete. Updated tracking data for', Object.keys(timeTracking).length, 'domains');
+      
+      // Notify analytics pages
+      this.notifyAnalyticsUpdate();
+    } catch (error) {
+      console.error('Error reanalyzing from categories:', error);
+      throw error;
+    }
+  }
+
+  notifyAnalyticsUpdate() {
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        if (tab.url && (tab.url.includes('analytics.html') || tab.url.includes('category-settings.html'))) {
+          chrome.tabs.sendMessage(tab.id, { action: 'dataUpdated' }).catch(() => {
+            // Page might not have content script, ignore error
+          });
+        }
+      });
+    });
+  }
+
   async autoGroupNewTab(tab) {
     try {
       if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
@@ -469,7 +666,7 @@ class SmartTabManager {
       }
 
       const url = new URL(tab.url);
-      const domain = url.hostname.replace('www.', '');
+      const domain = this.normalizeDomain(url.hostname);
       
       // Find existing group for this domain
       const groups = await chrome.tabGroups.query({});
@@ -510,16 +707,7 @@ class SmartTabManager {
 
   getDomainDisplayName(domain) {
     const displayNames = {
-      'github.com': 'GitHub',
-      'stackoverflow.com': 'Stack Overflow',
-      'google.com': 'Google',
-      'youtube.com': 'YouTube',
-      'twitter.com': 'Twitter',
-      'facebook.com': 'Facebook',
-      'linkedin.com': 'LinkedIn',
-      'reddit.com': 'Reddit',
-      'medium.com': 'Medium',
-      'dev.to': 'Dev.to'
+      
     };
     
     return displayNames[domain] || domain.charAt(0).toUpperCase() + domain.slice(1);

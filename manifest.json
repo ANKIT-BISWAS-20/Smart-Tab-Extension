@@ -11,7 +11,8 @@
     "storage",
     "activeTab",
     "sessions",
-    "background"
+    "background",
+    "history"
   ],
   "background": {
     "service_worker": "background.js"
@@ -58,7 +59,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["analytics.html", "analytics.js", "icon.png"],
+      "resources": ["analytics.html", "analytics.js", "category-settings.html", "category-settings.js", "category-settings-simple.html", "icon.png"],
       "matches": ["<all_urls>"]
     }
   ],

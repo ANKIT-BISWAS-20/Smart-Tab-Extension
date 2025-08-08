@@ -128,17 +128,38 @@ class TabManagerPopup {
       this.showTimeAnalytics();
     });
 
-    // Floating button event listeners
-    document.getElementById('quickRefresh').addEventListener('click', async () => {
-      await this.updateStats();
-      await this.loadTimeStats();
-      await this.loadSessions();
-      this.showNotification('Data refreshed!', 'success');
+    document.getElementById('categorySettings').addEventListener('click', async () => {
+      try {
+        console.log('Category Settings button clicked');
+        const response = await chrome.runtime.sendMessage({ action: 'openCategorySettings' });
+        console.log('Response:', response);
+        if (response.success) {
+          window.close();
+        } else {
+          console.error('Failed to open category settings:', response.error);
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
     });
 
-    document.getElementById('quickAnalytics').addEventListener('click', () => {
-      this.showTimeAnalytics();
-    });
+    // Floating button event listeners (only if elements exist)
+    const quickRefreshBtn = document.getElementById('quickRefresh');
+    if (quickRefreshBtn) {
+      quickRefreshBtn.addEventListener('click', async () => {
+        await this.updateStats();
+        await this.loadTimeStats();
+        await this.loadSessions();
+        this.showNotification('Data refreshed!', 'success');
+      });
+    }
+
+    const quickAnalyticsBtn = document.getElementById('quickAnalytics');
+    if (quickAnalyticsBtn) {
+      quickAnalyticsBtn.addEventListener('click', () => {
+        this.showTimeAnalytics();
+      });
+    }
   }
 
   async saveCurrentSession() {

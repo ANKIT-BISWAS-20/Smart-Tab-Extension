@@ -3,6 +3,122 @@ class TimeAnalytics {
   constructor() {
     this.data = null;
     this.init();
+    this.setupMessageListener();
+  }
+
+  // Domain metadata functions (copied from category-settings.js)
+  getFaviconUrl(domain) {
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
+  }
+
+  getDomainTitle(domain) {
+    const titles = {
+      'youtube.com': 'YouTube',
+      'github.com': 'GitHub',
+      'stackoverflow.com': 'Stack Overflow',
+      'google.com': 'Google',
+      'gmail.com': 'Gmail',
+      'docs.google.com': 'Google Docs',
+      'drive.google.com': 'Google Drive',
+      'facebook.com': 'Facebook',
+      'instagram.com': 'Instagram',
+      'twitter.com': 'Twitter',
+      'linkedin.com': 'LinkedIn',
+      'reddit.com': 'Reddit',
+      'wikipedia.org': 'Wikipedia',
+      'amazon.com': 'Amazon',
+      'netflix.com': 'Netflix',
+      'spotify.com': 'Spotify',
+      'discord.com': 'Discord',
+      'slack.com': 'Slack',
+      'zoom.us': 'Zoom',
+      'teams.microsoft.com': 'Microsoft Teams',
+      'outlook.com': 'Outlook',
+      'office.com': 'Microsoft Office',
+      'notion.so': 'Notion',
+      'figma.com': 'Figma',
+      'canva.com': 'Canva',
+      'adobe.com': 'Adobe',
+      'codepen.io': 'CodePen',
+      'jsfiddle.net': 'JSFiddle',
+      'replit.com': 'Replit',
+      'vercel.com': 'Vercel',
+      'medium.com': 'Medium',
+      'dev.to': 'Dev.to'
+    };
+    
+    const normalized = this.normalizeDomain(domain);
+    return titles[normalized] || this.capitalizeWords(normalized.split('.')[0]);
+  }
+
+  getDomainFallbackIcon(domain) {
+    return domain.charAt(0).toUpperCase();
+  }
+
+  normalizeDomain(domain) {
+    return domain.replace(/^(www\.|m\.|mobile\.)/, '').toLowerCase();
+  }
+
+  capitalizeWords(str) {
+    return str.replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  setupMessageListener() {
+    // Listen for data update messages from background script
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'dataUpdated') {
+        console.log('Analytics data update received');
+        this.refreshData();
+      }
+    });
+
+    // Listen for custom events from content script
+    window.addEventListener('analyticsDataUpdated', () => {
+      console.log('Analytics data update event received');
+      this.refreshData();
+    });
+  }
+
+  async refreshData() {
+    console.log('Refreshing analytics data...');
+    await this.loadData();
+    this.updateDisplay();
+    this.showRefreshNotification();
+  }
+
+  showRefreshNotification() {
+    // Create a temporary notification
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4CAF50;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-weight: 500;
+      animation: slideInRight 0.3s ease-out;
+    `;
+    notification.innerHTML = '📊 Analytics updated with new categories!';
+    document.body.appendChild(notification);
+    
+    // Add CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    setTimeout(() => {
+      notification.remove();
+      style.remove();
+    }, 4000);
   }
 
   async init() {
@@ -187,6 +303,7 @@ class TimeAnalytics {
   }
 
   updateTopSitesToday() {
+    console.log('Updating Top Sites Today with data:', this.data.topDomains);
     const topSitesToday = document.getElementById('topSitesToday');
     topSitesToday.innerHTML = '';
     
@@ -201,6 +318,8 @@ class TimeAnalytics {
       .sort((a, b) => b.todayTime - a.todayTime)
       .slice(0, 6);
     
+    console.log('Top sites for today:', topSites);
+    
     if (topSites.length === 0) {
       topSitesToday.innerHTML = '<div style="text-align: center; opacity: 0.6; grid-column: 1/-1;">No activity today</div>';
       return;
@@ -210,9 +329,19 @@ class TimeAnalytics {
       const siteCard = document.createElement('div');
       siteCard.className = 'site-card';
       
+      console.log(`Rendering ${site.domain} with category: ${site.category}`);
+      
       siteCard.innerHTML = `
         <div class="site-card-header">
-          <div class="site-domain">${site.domain}</div>
+          <div class="site-favicon">
+            <img src="${this.getFaviconUrl(site.domain)}" 
+                 alt="${site.domain}" 
+                 onerror="this.style.display='none'; this.parentNode.textContent='${this.getDomainFallbackIcon(site.domain)}';">
+          </div>
+          <div class="site-info">
+            <div class="site-domain">${site.domain}</div>
+            <div class="site-title">${this.getDomainTitle(site.domain)}</div>
+          </div>
           <div class="site-time">${this.formatTime(site.todayTime)}</div>
         </div>
         <div class="site-category-badge ${site.category}">
@@ -244,7 +373,17 @@ class TimeAnalytics {
       
       row.innerHTML = `
         <td>
-          <div style="font-weight: 500;">${site.domain}</div>
+          <div class="site-table-cell">
+            <div class="site-table-favicon">
+              <img src="${this.getFaviconUrl(site.domain)}" 
+                   alt="${site.domain}" 
+                   onerror="this.style.display='none'; this.parentNode.textContent='${this.getDomainFallbackIcon(site.domain)}';">
+            </div>
+            <div class="site-table-info">
+              <div class="site-table-domain">${site.domain}</div>
+              <div class="site-table-title">${this.getDomainTitle(site.domain)}</div>
+            </div>
+          </div>
         </td>
         <td>
           <span style="color: ${categoryColor}; font-weight: 500;">

@@ -10,6 +10,19 @@ class TabContentManager {
     this.setupKeyboardShortcuts();
   }
 
+  // Normalize domain to handle www and other variations consistently
+  normalizeDomain(hostname) {
+    if (!hostname) return '';
+    
+    // Remove www prefix
+    let normalized = hostname.toLowerCase().replace(/^www\./, '');
+    
+    // Handle other common prefixes if needed
+    normalized = normalized.replace(/^m\./, ''); // mobile prefixes
+    
+    return normalized;
+  }
+
   trackPageActivity() {
     // Track time spent on page for productivity metrics
     let startTime = Date.now();
@@ -58,7 +71,7 @@ class TabContentManager {
       action: 'recordTimeSpent',
       data: {
         url: window.location.href,
-        domain: window.location.hostname,
+        domain: this.normalizeDomain(window.location.hostname),
         title: document.title,
         timeSpent: timeSpent,
         timestamp: Date.now()
