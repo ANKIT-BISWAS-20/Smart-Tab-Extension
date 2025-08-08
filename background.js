@@ -676,6 +676,41 @@ class SmartTabManager {
         
         dailyStats[date] = newDayStats;
       }
+
+        // Update hourlyStats for all domains whose category changed
+        const resultHourly = await chrome.storage.local.get(['hourlyStats']);
+        const hourlyStats = resultHourly.hourlyStats || {};
+        let hourlyStatsChanged = false;
+        for (const [date, hours] of Object.entries(hourlyStats)) {
+          for (const [hour, hourData] of Object.entries(hours)) {
+            if (!hourData.domains) continue;
+            // For each domain in this hour, check if its category changed
+            for (const [domain, seconds] of Object.entries(hourData.domains)) {
+              const newCategory = (timeTracking[domain] && timeTracking[domain].category) || (domainCategories[domain]) || 'neutral';
+              // Find the old category by checking which category field has the time
+              let oldCategory = null;
+              ['productive', 'neutral', 'distracting'].forEach(cat => {
+                if (hourData[cat] && hourData[cat] >= seconds && (!oldCategory || hourData[cat] === seconds)) {
+                  oldCategory = cat;
+                }
+              });
+              if (oldCategory && oldCategory !== newCategory) {
+                // Remove time from old category, add to new
+                hourData[oldCategory] -= seconds;
+                if (hourData[oldCategory] < 0) hourData[oldCategory] = 0;
+                hourData[newCategory] = (hourData[newCategory] || 0) + seconds;
+                hourlyStatsChanged = true;
+              } else if (!oldCategory) {
+                // If old category not found, just add to new
+                hourData[newCategory] = (hourData[newCategory] || 0) + seconds;
+                hourlyStatsChanged = true;
+              }
+            }
+          }
+        }
+        if (hourlyStatsChanged) {
+          await chrome.storage.local.set({ hourlyStats });
+        }
       
       // Save updated data
       await chrome.storage.local.set({ timeTracking, dailyStats });
