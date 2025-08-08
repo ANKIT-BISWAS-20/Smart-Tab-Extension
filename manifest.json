@@ -5,6 +5,7 @@
   "description": "AI-powered tab management with auto-grouping, session saving, and productivity insights by Ankit Biswas",
   "author": "Ankit Biswas",
   "homepage_url": "https://github.com/ANKIT-BISWAS-20/Smart-Tab-Extension",
+  "privacy_policy": "https://github.com/ANKIT-BISWAS-20/Smart-Tab-Extension/blob/main/PRIVACY_POLICY.md",
   "permissions": [
     "tabs",
     "tabGroups",
