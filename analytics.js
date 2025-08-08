@@ -147,17 +147,44 @@ class TimeAnalytics {
       if (response.success && response.data) {
         this.data = response.data;
         
-        // If we have no real data, generate consistent sample data for demo
+        // Only generate sample data if explicitly requested or for demo purposes
+        // Comment out the next few lines if you want to see real data only
         if (this.data.today.totalTime === 0 && this.data.topDomains.length === 0) {
-          this.data = this.generateConsistentSampleData();
+          // Show real empty state instead of sample data
+          this.data = this.generateEmptyState();
         }
       } else {
-        this.data = this.generateConsistentSampleData();
+        this.data = this.generateEmptyState();
       }
     } catch (error) {
       console.error('Error loading analytics data:', error);
-      this.data = this.generateConsistentSampleData();
+      this.data = this.generateEmptyState();
     }
+  }
+
+  generateEmptyState() {
+    return {
+      today: {
+        totalTime: 0,
+        productive: 0,
+        neutral: 0,
+        distracting: 0
+      },
+      topDomains: [],
+      weekStats: Array(7).fill(0).map((_, i) => ({
+        date: new Date(Date.now() - (6-i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        totalTime: 0,
+        productive: 0,
+        neutral: 0,
+        distracting: 0
+      })),
+      hourlyStats: Array(24).fill(0).map((_, hour) => ({
+        hour,
+        productive: 0,
+        neutral: 0,
+        distracting: 0
+      }))
+    };
   }
 
   generateConsistentSampleData() {
@@ -241,6 +268,14 @@ class TimeAnalytics {
   }
 
   updateDisplay() {
+    // Check if we have any real data
+    const hasData = this.data.today.totalTime > 0 || this.data.topDomains.length > 0;
+    
+    if (!hasData) {
+      this.showEmptyState();
+      return;
+    }
+    
     this.updateTodayStats();
     this.updateWeeklyChart();
     this.updateCategoryDonutChart();
@@ -251,6 +286,43 @@ class TimeAnalytics {
     this.updateProductivityScore();
     this.updateTopSitesToday();
     this.updateSitesTable();
+  }
+
+  showEmptyState() {
+    // Update time displays
+    document.getElementById('totalToday').textContent = '0h 0m';
+    document.getElementById('productiveToday').textContent = '0h 0m';
+    document.getElementById('neutralToday').textContent = '0h 0m';
+    document.getElementById('distractingToday').textContent = '0h 0m';
+    
+    // Show helpful empty state messages
+    const chartContainers = [
+      { id: 'weeklyChart', message: '📊 Start browsing to see your weekly activity patterns' },
+      { id: 'categoryChart', message: '🎯 Visit websites to track productivity categories' },
+      { id: 'hourlyChart', message: '⏰ Your hourly browsing patterns will appear here' },
+      { id: 'trendsChart', message: '📈 Productivity trends will show after some usage' },
+      { id: 'dailyTimeChart', message: '📅 Daily activity breakdown will appear here' },
+      { id: 'productivityChart', message: '🚀 Productivity score will calculate from your activity' }
+    ];
+    
+    chartContainers.forEach(({ id, message }) => {
+      const container = document.getElementById(id);
+      if (container) {
+        container.innerHTML = `
+          <div style="
+            text-align: center; 
+            padding: 40px 20px; 
+            color: #888; 
+            font-size: 14px;
+            border: 2px dashed #333;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.02);
+          ">
+            ${message}
+          </div>
+        `;
+      }
+    });
   }
 
   updateTodayStats() {
@@ -1181,9 +1253,12 @@ async function resetData() {
       const response = await chrome.runtime.sendMessage({ action: 'resetTimeStats' });
       if (response && response.success) {
         showResetSuccess();
+        // Clear the UI immediately
+        clearAllCharts();
+        // Reload after a short delay
         setTimeout(() => {
           location.reload();
-        }, 2000);
+        }, 1500);
       } else {
         throw new Error('Reset operation failed');
       }
@@ -1286,8 +1361,15 @@ function showResetSuccess() {
     z-index: 10000;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   `;
-  successDiv.textContent = '✅ All data reset successfully! Reloading...';
+  successDiv.textContent = '✅ All data reset successfully! Refreshing page...';
   document.body.appendChild(successDiv);
+  
+  // Remove the success message after the page reloads
+  setTimeout(() => {
+    if (document.body.contains(successDiv)) {
+      document.body.removeChild(successDiv);
+    }
+  }, 3000);
 }
 
 function showResetError(message) {
@@ -1310,6 +1392,79 @@ function showResetError(message) {
   setTimeout(() => {
     document.body.removeChild(errorDiv);
   }, 5000);
+}
+
+function clearAllCharts() {
+  // Clear cached data in the analytics instance
+  if (window.timeAnalyticsInstance) {
+    window.timeAnalyticsInstance.data = null;
+  }
+  
+  // Clear specific time display elements
+  const timeElements = [
+    'totalToday',
+    'productiveToday', 
+    'neutralToday',
+    'distractingToday'
+  ];
+  
+  timeElements.forEach(elementId => {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.textContent = '0h 0m';
+    }
+  });
+  
+  // Clear percentage elements
+  const percentageElements = [
+    'productivePercent',
+    'neutralPercent',
+    'distractingPercent'
+  ];
+  
+  percentageElements.forEach(elementId => {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.textContent = '0% of total time';
+    }
+  });
+  
+  // Clear all chart containers
+  const chartContainers = [
+    'dailyTimeChart',
+    'categoryChart', 
+    'hourlyChart',
+    'weeklyChart',
+    'productivityChart',
+    'trendsChart'
+  ];
+  
+  chartContainers.forEach(containerId => {
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = '<div style="text-align: center; padding: 40px; color: #888;">No data available</div>';
+    }
+  });
+  
+  // Clear summary stats (any other .value elements)
+  const summaryElements = document.querySelectorAll('.summary-card .value');
+  summaryElements.forEach(element => {
+    if (!timeElements.includes(element.id)) {
+      element.textContent = '0';
+    }
+  });
+  
+  // Clear any data displays
+  const dataDisplays = document.querySelectorAll('.data-display, .stats-container');
+  dataDisplays.forEach(display => {
+    display.innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">All data cleared</div>';
+  });
+  
+  // Clear site lists and other dynamic content
+  const siteLists = document.querySelectorAll('.site-list, .category-sites');
+  siteLists.forEach(list => {
+    list.innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">No sites tracked yet</div>';
+  });
 }
 
 // Debug function to test export functionality

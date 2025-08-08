@@ -577,7 +577,11 @@ class SmartTabManager {
   async resetTimeStats() {
     await chrome.storage.local.set({ 
       timeTracking: {}, 
-      dailyStats: {} 
+      dailyStats: {},
+      tabActivity: {},
+      productivity: 75,
+      domainCategories: {},
+      savedSessions: []
     });
   }
 
